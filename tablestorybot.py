@@ -12,6 +12,7 @@ from threading import Thread
 # needs a timer (and be able toadd a command to the timer)
 # sanitizing sql
 # do the dnd api thing
+# dice rolling? !roll 1d20
 # make the code better pnySmile
 
 HOST = "irc.twitch.tv"
