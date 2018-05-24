@@ -21,7 +21,7 @@ from threading import Thread
 # Load config.ini
 config = configparser.ConfigParser()
 config.read('config.ini')
-print(config.sections())
+
 
 def dbGetOne(query):
     db = pymysql.connect(config["Database"]["HOSTNAME"],config["Database"]["USERNAME"],config["Database"]["PASSWORD"],config["Database"]["DBNAME"] )
@@ -62,6 +62,7 @@ def openSocket():
     s.send(str("PASS " + config["Twitch"]["PASS"] + "\r\n").encode("utf-8"))
     s.send(str("NICK " + config["Twitch"]["IDENT"] + "\r\n").encode("utf-8"))
     s.send(str("JOIN #" + config["Twitch"]["CHANNEL"] + "\r\n").encode("utf-8"))
+    
     return s
     
 def sendMessage(s, message):
@@ -79,8 +80,10 @@ def joinRoom(s):
         for line in temp:
             print(line)
             Loading = loadingComplete(line)
+   
     print("Finished Connecting...")
-    
+    s.send("CAP REQ :twitch.tv/commands\r\n".encode("UTF-8"))
+    sendMessage(s, "/mods")
 def loadingComplete(line):
     if("End of /NAMES list" in line):
         return False
@@ -103,22 +106,12 @@ def is_live_stream(streamer_name, client_id):
 # loopThread.setDaemon(True)
 # loopThread.start()
 
-def getModList():
-    print("Getting modlist")
-    url = "https://tmi.twitch.tv/group/user/tablestory/chatters"
-    response = urllib.request.urlopen(url)
-    data = json.loads(response.read().decode("utf-8"))
-    moderators = []
-    
-    for name in data["chatters"]["moderators"]:
-        moderators.append(name)
-    return moderators
-
 s = openSocket()
 joinRoom(s)
 readbuffer = ""
 message = ""
-mods = getModList()
+requested=False
+
 
 while True:
     while True:
@@ -128,7 +121,7 @@ while True:
 
             try:
                 chat_data =  s.recv(1024)
-                
+                print(chat_data)
             except socket.timeout:
                 print("Error: disconnected.. Reconnecting")
                 s = openSocket()
@@ -138,6 +131,7 @@ while True:
             readbuffer = readbuffer + chat_data.decode("utf-8")
             temp = readbuffer.split('\r\n')
             readbuffer = temp.pop()
+            print(readbuffer)
             if readbuffer == "":
                 pass
             
@@ -145,18 +139,34 @@ while True:
                 if "PING" in line:
                     s.send("PONG :tmi.twitch.tv\r\n".encode("utf-8"))
                     continue
-                user = getUser(line)
-                mods = getModList()
-                if user in mods:
-                    print("User is moderator.")
-                message = getMessage(line)
+                if "PRIVMSG" in line:
+                    user = getUser(line)
+                    #mods = getModList()
+                    if user in mods:
+                        print("User is moderator.")
+                    message = getMessage(line)
+                elif "NOTICE" in line:
+                    if "moderators" in line:
+                        tempmsg = line.split(":", 3)
+                        tempmods = tempmsg[3].split(",")
+                        #print(tempmods)
+                        mods = []
+                        for moderator in tempmods:
+                            mods.append(moderator.lstrip())
+                        print(mods)
+                        if requested:
+                            sendMessage(s, "Found {} moderators.".format(len(mods)))
+                            requested = False
+                    continue
+                else:
+                    continue
 
                 print("{} typed: {} \n".format(user, message))
 
 
                 if re.search(r"[a-zA-Z]{2,}\.[a-zA-Z]{2,}", message ) and user not in mods:
-                    sendMessage(s, "/timeout "+user+" 1".encode("utf-8"))
-                    sendMessage(s, "Links are not allowed!".encode("utf-8"))
+                    sendMessage(s, "/timeout "+user+" 1")
+                    sendMessage(s, "Links are not allowed!")
 
 #####################################################################################################################
                                                     ## COMMANDS ## 
@@ -228,6 +238,9 @@ while True:
 #####################################################################################################################
                                                     ## UTILS ## 
 #####################################################################################################################
+                if re.search(r"^!refreshmods", message):
+                    requested = True
+                    sendMessage(s, "/mods")
 
                 if re.search(r"^!caster [a-zA-Z0-9_]+", message ) and user in mods:
                     print("** Caster command **")
