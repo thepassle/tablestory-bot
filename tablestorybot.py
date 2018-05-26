@@ -236,8 +236,9 @@ while True:
 
                             dbExecute(query)
                             sendMessage(s, "Command: '"+command+"' added.")
+                            (triggers, responses, clearances) = load_commands()
                             continue
-                    (triggerlist, responses, clearances) = load_commands()
+                    
                 if re.search(r"!delcom ![a-zA-Z0-9]+", message ) and user in mods:
                     print("** Removing command **")
                     message = message.split(' ', 2)
