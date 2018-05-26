@@ -97,6 +97,23 @@ def is_live_stream(streamer_name, client_id):
 
     return streamer["stream"] is not None
 
+def load_commands():
+    print("Loading commands...")
+    triggerlist = []
+    replies  = {}
+    levels = {}
+    allCommands = dbGetAll("SELECT * FROM commands")
+    for command in allCommands:
+        trigger = str(command[0])
+        triggerlist.append(trigger)
+        reply = str(command[1][2:-1])
+        replyb = bytes(reply, "utf-8")
+        replye = ast.literal_eval(str(replyb).replace('\\\\', '\\'))
+        replyf = replye.decode("utf-8")
+        
+        replies[trigger] = replyf
+        levels[trigger] = str(command[2])
+    return (triggerlist, replies, levels)
 # def taskLoop():
 #     while True:
 #         print "** BEGIN TASKLOOP **"
@@ -111,8 +128,11 @@ joinRoom(s)
 readbuffer = ""
 message = ""
 requested=False
+triggers = []
+responses = {}
+clearances = {}
 
-
+(triggers, responses, clearances) = load_commands()
 while True:
     while True:
         try:
@@ -174,35 +194,25 @@ while True:
 
                 # this REALLY needs to be changed
                 if message[0] == "!":
-                    allCommands = dbGetAll("SELECT * FROM commands")
+                    # allCommands = dbGetAll("SELECT * FROM commands")
                     #print(allCommands)
-                    for command in allCommands:
-                        trigger = str(command[0])
-                        #print(command[1])
-                        reply = str(command[1][2:-1])
-                        replyb = bytes(reply, "utf-8")
-                        
-                        replye = ast.literal_eval(str(replyb).replace('\\\\', '\\'))
-                        replyf = replye.decode("utf-8")
-
-                        
-                        
-                        clearance = str(command[2])
-                        
-                        
-                        
+                    
+                    trigger = message.strip().split(" ")[0]    
+                    if trigger in triggers:
+                        clearance = clearances[trigger]
+                        reply = responses[trigger]
                         if re.search(r""+trigger+" [@]?[a-zA-Z0-9]+", message ):
                             if clearance == 'mod' and user not in mods:
                                 pass
                             else:
                                 target = message.strip().split(' ',1)[1] 
                                 print("this should @ target and print message.")
-                                sendMessage(s, target +": " + replyf)
+                                sendMessage(s, target +": " + reply)
                         elif message == trigger:
                             if clearance == 'mod' and user not in mods:
                                 pass
                             else:
-                                sendMessage(s, replyf)
+                                sendMessage(s, reply)
 
 
                 #add command
@@ -227,7 +237,7 @@ while True:
                             dbExecute(query)
                             sendMessage(s, "Command: '"+command+"' added.")
                             continue
-
+                    (triggerlist, responses, clearances) = load_commands()
                 if re.search(r"!delcom ![a-zA-Z0-9]+", message ) and user in mods:
                     print("** Removing command **")
                     message = message.split(' ', 2)
