@@ -54,7 +54,7 @@ def getUser(line):
 def getMessage(line):
     separate = line.split(":", 2)
     message = separate[2]
-    return str(message).lower().strip()
+    return str(message).strip()
 
 def openSocket():
     s = socket.socket()
@@ -90,7 +90,7 @@ def loadingComplete(line):
     else:
         return True
 
-def is_live_stream(streamer_name, client_id):
+def is_live_stream(streamer_name):
     twitch_api_stream_url = "https://api.twitch.tv/kraken/streams/" + streamer_name + "?client_id=" + config["Twitch"]["CLIENT_ID"]
     streamer_html = requests.get(twitch_api_stream_url)
     streamer = json.loads(streamer_html.content)
@@ -113,11 +113,15 @@ def load_commands():
         
         replies[trigger] = replyf
         levels[trigger] = str(command[2])
+    print(triggerlist)
     return (triggerlist, replies, levels)
-# def taskLoop():
-#     while True:
-#         print "** BEGIN TASKLOOP **"
-#         time.sleep(60)
+#  def taskLoop(s):
+#      is_live = False
+#      while True:
+#          if is_live:
+
+
+#          time.sleep(60)
 
 # loopThread = Thread(target = taskLoop)
 # loopThread.setDaemon(True)
@@ -131,6 +135,8 @@ requested=False
 triggers = []
 responses = {}
 clearances = {}
+mods = []
+timertriggers = config["Timers"]["TRIGGERS"].split(",")
 
 (triggers, responses, clearances) = load_commands()
 while True:
@@ -146,7 +152,7 @@ while True:
                 print("Error: disconnected.. Reconnecting")
                 s = openSocket()
                 joinRoom(s)
-                continue;
+                continue
 
             readbuffer = readbuffer + chat_data.decode("utf-8")
             temp = readbuffer.split('\r\n')
@@ -171,6 +177,7 @@ while True:
                         tempmods = tempmsg[3].split(",")
                         #print(tempmods)
                         mods = []
+                        mods.append("tablestory")
                         for moderator in tempmods:
                             mods.append(moderator.lstrip())
                         print(mods)
@@ -198,7 +205,7 @@ while True:
                     #print(allCommands)
                     
                     trigger = message.strip().split(" ")[0]    
-                    if trigger in triggers:
+                    if trigger.lower() in triggers:
                         clearance = clearances[trigger]
                         reply = responses[trigger]
                         if re.search(r""+trigger+" [@]?[a-zA-Z0-9]+", message ):
@@ -227,11 +234,15 @@ while True:
 
                         clearance = str(message[1].split('=')[1])
                         command = str(message[2])
+                        if command.lower() in triggers:
+                            sendMessage(s, "Command {} already exists".format(command))
+                            continue
                         reply = str(message[3])
                         print(reply.encode("utf-8"))
 
                         if command[0] == '!':
                             query = "INSERT INTO commands (command, reply, clearance) VALUES ( '"+command+"', \""+ str(reply.encode("utf-8")) +"\" , '"+clearance+"' )"
+                            print(query)
                             query = query.replace('\\', '\\\\' )
 
                             dbExecute(query)
@@ -244,14 +255,49 @@ while True:
                     message = message.split(' ', 2)
 
                     dbExecute("DELETE FROM commands WHERE command='"+str(message[1]).strip()+"' ")
+                    (triggers, responses, clearances) = load_commands()
                     sendMessage(s, "Command: '"+str(message[1])+"' deleted.")
                     continue
 #####################################################################################################################
                                                     ## UTILS ## 
 #####################################################################################################################
+
+                if re.search(r"^!timer ![a-zA-Z0-9]+", message ) and user in mods:
+                    target = message.split(" ")[1].lower()
+                    if target not in triggers:
+                        sendMessage(s,"Command {} does not exist".format(target))
+                        continue
+                    if target in timertriggers:
+                        timertriggers.remove(target)
+                        config.set("Timers", "TRIGGERS", ",".join(timertriggers))
+                        sendMessage(s, "Command {} removed from timer.".format(target))
+                    else:
+                        timertriggers.append(target)
+                        config.set("Timers", "TRIGGERS", ",".join(timertriggers))
+                        sendMessage(s, "Command {} added to timer.".format(target))
+                    with open("config.ini", 'w') as configfile:
+                        config.write(configfile)
+                    continue
                 if re.search(r"^!refreshmods", message):
                     requested = True
                     sendMessage(s, "/mods")
+
+                if re.search(r"^!uptime", message):
+                    twitch_api_stream_url = "https://api.twitch.tv/kraken/streams/tablestory?client_id=" + config["Twitch"]["CLIENT_ID"]
+                    streamer_html = urllib.request.urlopen(twitch_api_stream_url)
+                    streamer = json.loads(streamer_html.read().decode("utf-8"))
+                    
+                    curtime = datetime.datetime.utcnow()
+
+                    streamstart = datetime.datetime.strptime(str(streamer["stream"]["created_at"]), '%Y-%m-%dT%H:%M:%SZ')
+                    elapsed = int((curtime - streamstart) / datetime.timedelta(seconds=1))
+                    hours = int(elapsed / 3600)
+                    minutes = int((elapsed - (3600*hours))/60)
+                    seconds = int((elapsed -((3600*hours) + (60*minutes))))
+                    
+                    sendMessage(s, "The stream has been live for {}:{}:{}".format(hours, str(minutes).zfill(2), str(seconds).zfill(2)))
+                    
+
 
                 if re.search(r"^!caster [a-zA-Z0-9_]+", message ) and user in mods:
                     print("** Caster command **")
@@ -318,7 +364,8 @@ while True:
 
 
         except:
-            print(sys.exc_info()[0])
+            print(doesntexist)
+            
             pass
         else:
             break
