@@ -46,6 +46,13 @@ def dbExecute(query):
     cursor.execute(query)
     db.close()
 
+def dbExecuteargs(query, arg):
+    #db = pymysql.connect("www52.totaalholding.nl","thepas1q_tablestorybot","meme6Sux","thepas1q_tablestory" )
+    db = pymysql.connect(config["Database"]["HOSTNAME"],config["Database"]["USERNAME"],config["Database"]["PASSWORD"],config["Database"]["DBNAME"] )
+    cursor = db.cursor()
+    cursor.execute(query, arg)
+    db.close()
+
 def getUser(line):
     separate = line.split(":", 2)
     user = separate[1].split("!", 1)[0]
@@ -251,11 +258,11 @@ while True:
                         print(reply.encode("utf-8"))
 
                         if command[0] == '!':
-                            query = "INSERT INTO commands (command, reply, clearance) VALUES ( '"+command+"', \""+ str(reply.encode("utf-8")) +"\" , '"+clearance+"' )"
+                            query = "INSERT INTO commands (command, reply, clearance) VALUES ( %s, %s, %s)"
                             print(query)
                             query = query.replace('\\', '\\\\' )
 
-                            dbExecute(query)
+                            dbExecuteargs(query, (command, str(reply.encode("utf-8")), clearance))
                             sendMessage(s, "Command: '"+command+"' added.")
                             (triggers, responses, clearances) = load_commands()
                             continue
@@ -267,12 +274,12 @@ while True:
                     dbExecute("DELETE FROM commands WHERE command='"+str(message[1]).strip()+"' ")
                     (triggers, responses, clearances) = load_commands()
                     if (message[1].lower() in timertriggers):
-                        timertriggers.remove(target)
+                        timertriggers.remove(message[1].lower())
                         config.set("Timers", "TRIGGERS", ",".join(timertriggers))
                         with open("config.ini", 'w') as configfile:
                             config.write(configfile)
                 
-                        sendMessage(s, "Command {} removed from timer.".format(target))
+                        sendMessage(s, "Command {} removed from timer.".format(message[1].lower()))
                     sendMessage(s, "Command: '"+str(message[1])+"' deleted.")
                     continue
 #####################################################################################################################
@@ -380,7 +387,7 @@ while True:
                         totalquotes = str(int(totalquotes+1))
 
                         sendMessage(s, "Added quote #" + totalquotes)
-                        dbExecute('INSERT INTO quotes (number, quote) VALUES ('+totalquotes+', "\''+newquote+'\', '+date+'  #'+totalquotes+'")')
+                        dbExecuteargs('INSERT INTO quotes (number, quote) VALUES ( %s, %s)', (totalquotes, "{} {} #{}".format(newquote, date, totalquotes)))
 
 
         except:
