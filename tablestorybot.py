@@ -40,14 +40,14 @@ def dbGetAll(query):
     return data
 
 def dbExecute(query):
-    #db = pymysql.connect("www52.totaalholding.nl","thepas1q_tablestorybot","meme6Sux","thepas1q_tablestory" )
+    
     db = pymysql.connect(config["Database"]["HOSTNAME"],config["Database"]["USERNAME"],config["Database"]["PASSWORD"],config["Database"]["DBNAME"] )
     cursor = db.cursor()
     cursor.execute(query)
     db.close()
 
 def dbExecuteargs(query, arg):
-    #db = pymysql.connect("www52.totaalholding.nl","thepas1q_tablestorybot","meme6Sux","thepas1q_tablestory" )
+   
     db = pymysql.connect(config["Database"]["HOSTNAME"],config["Database"]["USERNAME"],config["Database"]["PASSWORD"],config["Database"]["DBNAME"] )
     cursor = db.cursor()
     cursor.execute(query, arg)
@@ -164,7 +164,7 @@ while True:
 
             try:
                 chat_data =  s.recv(1024)
-                print(chat_data)
+                
             except socket.timeout:
                 print("Error: disconnected.. Reconnecting")
                 s = openSocket()
@@ -174,7 +174,7 @@ while True:
             readbuffer = readbuffer + chat_data.decode("utf-8")
             temp = readbuffer.split('\r\n')
             readbuffer = temp.pop()
-            print(readbuffer)
+            
             if readbuffer == "":
                 pass
             
@@ -184,7 +184,7 @@ while True:
                     continue
                 if "PRIVMSG" in line:
                     user = getUser(line)
-                    #mods = getModList()
+                    
                     if user in mods:
                         print("User is moderator.")
                     message = getMessage(line)
@@ -197,7 +197,7 @@ while True:
                         mods.append("tablestory")
                         for moderator in tempmods:
                             mods.append(moderator.lstrip())
-                        print(mods)
+                        
                         if requested:
                             sendMessage(s, "Found {} moderators.".format(len(mods)))
                             requested = False
@@ -218,8 +218,7 @@ while True:
 
                 # this REALLY needs to be changed
                 if message[0] == "!":
-                    # allCommands = dbGetAll("SELECT * FROM commands")
-                    #print(allCommands)
+                    
                     
                     trigger = message.strip().split(" ")[0]    
                     if trigger.lower() in triggers:
@@ -259,7 +258,7 @@ while True:
 
                         if command[0] == '!':
                             query = "INSERT INTO commands (command, reply, clearance) VALUES ( %s, %s, %s)"
-                            print(query)
+                           
                             query = query.replace('\\', '\\\\' )
 
                             dbExecuteargs(query, (command, str(reply.encode("utf-8")), clearance))
