@@ -92,9 +92,9 @@ def loadingComplete(line):
 
 def is_live_stream(streamer_name):
     twitch_api_stream_url = "https://api.twitch.tv/kraken/streams/" + streamer_name + "?client_id=" + config["Twitch"]["CLIENT_ID"]
-    streamer_html = requests.get(twitch_api_stream_url)
-    streamer = json.loads(streamer_html.content)
-
+    streamer_html = urllib.request.urlopen(twitch_api_stream_url)
+    streamer = json.loads(streamer_html.read().decode("utf-8"))
+    
     return streamer["stream"] is not None
 
 def load_commands():
@@ -115,17 +115,23 @@ def load_commands():
         levels[trigger] = str(command[2])
     print(triggerlist)
     return (triggerlist, replies, levels)
-#  def taskLoop(s):
-#      is_live = False
-#      while True:
-#          if is_live:
+def taskLoop(s, replies, timers):
+    is_live = False
+    while True:
+        if is_live:
+            if(len(timers) > 0):
+                sendMessage(s, replies[random.choice(timers)])
+            time.sleep(14 * 60)
+            is_live = is_live_stream(config["Twitch"]["CHANNEL"])
+            if not is_live:
+                sendMessage(s, "Detected channel offline.")
+        else:
+            is_live = is_live_stream(config["Twitch"]["CHANNEL"])
+            if is_live:
+                sendMessage(s, "Detected channel online. Starting timer..")
+        time.sleep(60)
 
 
-#          time.sleep(60)
-
-# loopThread = Thread(target = taskLoop)
-# loopThread.setDaemon(True)
-# loopThread.start()
 
 s = openSocket()
 joinRoom(s)
@@ -139,6 +145,10 @@ mods = []
 timertriggers = config["Timers"]["TRIGGERS"].split(",")
 
 (triggers, responses, clearances) = load_commands()
+loopThread = Thread(target = taskLoop, args = (s, responses, timertriggers))
+loopThread.setDaemon(True)
+loopThread.start()
+
 while True:
     while True:
         try:
@@ -256,6 +266,13 @@ while True:
 
                     dbExecute("DELETE FROM commands WHERE command='"+str(message[1]).strip()+"' ")
                     (triggers, responses, clearances) = load_commands()
+                    if (message[1].lower() in timertriggers):
+                        timertriggers.remove(target)
+                        config.set("Timers", "TRIGGERS", ",".join(timertriggers))
+                        with open("config.ini", 'w') as configfile:
+                            config.write(configfile)
+                
+                        sendMessage(s, "Command {} removed from timer.".format(target))
                     sendMessage(s, "Command: '"+str(message[1])+"' deleted.")
                     continue
 #####################################################################################################################
@@ -286,7 +303,10 @@ while True:
                     twitch_api_stream_url = "https://api.twitch.tv/kraken/streams/tablestory?client_id=" + config["Twitch"]["CLIENT_ID"]
                     streamer_html = urllib.request.urlopen(twitch_api_stream_url)
                     streamer = json.loads(streamer_html.read().decode("utf-8"))
-                    
+                    if streamer["stream"] is None:
+                        sendMessage(s, "Channel is not live.")
+                        continue
+
                     curtime = datetime.datetime.utcnow()
 
                     streamstart = datetime.datetime.strptime(str(streamer["stream"]["created_at"]), '%Y-%m-%dT%H:%M:%SZ')
