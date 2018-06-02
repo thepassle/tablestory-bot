@@ -98,11 +98,17 @@ def loadingComplete(line):
         return True
 
 def is_live_stream(streamer_name):
-    twitch_api_stream_url = "https://api.twitch.tv/kraken/streams/" + streamer_name + "?client_id=" + config["Twitch"]["CLIENT_ID"]
-    streamer_html = urllib.request.urlopen(twitch_api_stream_url)
-    streamer = json.loads(streamer_html.read().decode("utf-8"))
-    
-    return streamer["stream"] is not None
+    check_if_live = True
+    while check_if_live:
+        try:
+            twitch_api_stream_url = "https://api.twitch.tv/kraken/streams/" + streamer_name + "?client_id=" + config["Twitch"]["CLIENT_ID"]
+            streamer_html = urllib.request.urlopen(twitch_api_stream_url)
+            streamer = json.loads(streamer_html.read().decode("utf-8"))
+
+            return streamer["stream"] is not None
+        except:
+            print("Twitch API did not respond, trying again in 60 seconds..")
+            time.sleep(60)
 
 def load_commands():
     print("Loading commands...")
@@ -133,6 +139,10 @@ def taskLoop(s, replies, timers):
             if not is_live:
                 sendMessage(s, "Detected channel offline.")
         else:
+            if "!retweet" in timers:
+                timers.remove("!retweet")
+                replies["!retweet"] = "Tweet for current stream not set."
+                sendMessage(s, "Removed retweet timer.")
             is_live = is_live_stream(config["Twitch"]["CHANNEL"])
             if is_live:
                 sendMessage(s, "Detected channel online. Starting timer..")
@@ -149,6 +159,8 @@ triggers = []
 responses = {}
 clearances = {}
 mods = []
+permits = []
+
 timertriggers = config["Timers"]["TRIGGERS"].split(",")
 
 (triggers, responses, clearances) = load_commands()
@@ -181,6 +193,7 @@ while True:
             for line in temp: 
                 if "PING" in line:
                     s.send("PONG :tmi.twitch.tv\r\n".encode("utf-8"))
+                    print("Ping? Pong!")
                     continue
                 if "PRIVMSG" in line:
                     user = getUser(line)
@@ -208,9 +221,13 @@ while True:
                 print("{} typed: {} \n".format(user, message))
 
 
-                if re.search(r"[a-zA-Z]{2,}\.[a-zA-Z]{2,}", message ) and user not in mods:
-                    sendMessage(s, "/timeout "+user+" 1")
-                    sendMessage(s, "Links are not allowed!")
+                if re.search(r"[a-zA-Z]{2,}\.[a-zA-Z]{2,}", message ) and (user not in mods):
+                    if user.lower() in permits:
+                        permits.remove(user)
+                        
+                    else:    
+                        sendMessage(s, "/timeout "+user+" 1")
+                        sendMessage(s, "@{} links are not allowed! Ask a mod for a !permit.")
 
 #####################################################################################################################
                                                     ## COMMANDS ## 
@@ -239,7 +256,7 @@ while True:
 
 
                 #add command
-                if re.search(r"!addcom -ul=all ![a-zA-Z0-9]+", message ) or re.search(r"!addcom -ul=mod ![a-zA-Z0-9]+", message ) and user in mods:
+                if (re.search(r"!addcom -ul=all ![a-zA-Z0-9]+", message ) or re.search(r"!addcom -ul=mod ![a-zA-Z0-9]+", message ))and (user in mods):
                     print("** Adding command **")
                     #if theres only '!addcom' and '!someword', but no reply
                     if len(message.split(' ')) <= 3:
@@ -249,7 +266,7 @@ while True:
                         message = message.split(' ', 3)
 
                         clearance = str(message[1].split('=')[1])
-                        command = str(message[2])
+                        command = str(message[2]).lower()
                         if command.lower() in triggers:
                             sendMessage(s, "Command {} already exists".format(command))
                             continue
@@ -259,14 +276,17 @@ while True:
                         if command[0] == '!':
                             query = "INSERT INTO commands (command, reply, clearance) VALUES ( %s, %s, %s)"
                            
-                            query = query.replace('\\', '\\\\' )
+                            
 
                             dbExecuteargs(query, (command, str(reply.encode("utf-8")), clearance))
                             sendMessage(s, "Command: '"+command+"' added.")
-                            (triggers, responses, clearances) = load_commands()
+                            triggers.append(command)
+                            responses[command] = reply
+                            clearances[command] = clearance
+                            #(triggers, responses, clearances) = load_commands()
                             continue
                     
-                if re.search(r"!delcom ![a-zA-Z0-9]+", message ) and user in mods:
+                if re.search(r"!delcom ![a-zA-Z0-9]+", message ) and (user in mods):
                     print("** Removing command **")
                     message = message.split(' ', 2)
 
@@ -285,7 +305,7 @@ while True:
                                                     ## UTILS ## 
 #####################################################################################################################
 
-                if re.search(r"^!timer ![a-zA-Z0-9]+", message ) and user in mods:
+                if re.search(r"^!timer ![a-zA-Z0-9]+", message ) and (user in mods):
                     target = message.split(" ")[1].lower()
                     if target not in triggers:
                         sendMessage(s,"Command {} does not exist".format(target))
@@ -325,7 +345,7 @@ while True:
                     
 
 
-                if re.search(r"^!caster [a-zA-Z0-9_]+", message ) and user in mods:
+                if re.search(r"^!caster [a-zA-Z0-9_]+", message ) and (user in mods):
                     print("** Caster command **")
 
                     message = message.split(' ')
@@ -341,6 +361,26 @@ while True:
 
                     sendMessage(s, "We love @"+message[1]+", go give them a follow at www.twitch.tv/"+message[1]+" ! They were last seen playing "+str(game))
                     continue
+
+                if re.search(r"^!permit [a-zA-Z0-9_]+", message ) and (user in mods): 
+                    target = message.split(" ")[1]
+                    if target not in permits:
+                        permits.append(target.lower())
+                        sendMessage(s, "@{}: {} has allowed you to post one link.".format(target, user))
+
+                if re.search(r"^!tweet https://twitter.com/ATablestory/status/[0-9_]+", message ) and (user in mods):
+                    url = message.split(" ")[1]
+                      
+                    if "!retweet" not in triggers:
+                        triggers.append("!retweet")
+                        createdtrigger = True
+                    responses["!retweet"] = "Let your friends know we're live and retweet out our stream: {}".format(url)
+                    clearances["!retweet"] = "all"
+                    if "!retweet" not in timertriggers:
+                        timertriggers.append("!retweet")
+                    
+                    sendMessage(s, "!retweet command and timer created/updated.")
+
 #####################################################################################################################
                                                     ## QUOTES ## 
 #####################################################################################################################
@@ -370,7 +410,7 @@ while True:
                         sendMessage(s, str(quote[1]))
 
 
-                    if re.search(r"!delquote [0-9]+", message ) and user in mods:
+                    if re.search(r"!delquote [0-9]+", message ) and (user in mods):
                         print("** Remove quote **")
 
                         quotenr = message.split(' ', 1)[1]
@@ -378,7 +418,7 @@ while True:
                         sendMessage(s, "Quote #" + quotenr + " deleted.")
 
 
-                    if re.search(r"!addquote", message ) and user in mods:
+                    if re.search(r"!addquote", message ) and (user in mods):
                         print("** Add quote **")
 
                         newquote = str(message.strip().split(' ', 1)[1])
@@ -390,7 +430,7 @@ while True:
 
 
         except:
-            print(doesntexist)
+            
             
             pass
         else:
