@@ -177,7 +177,7 @@ while True:
             try:
                 chat_data =  s.recv(1024)
                 
-            except socket.timeout:
+            except:
                 print("Error: disconnected.. Reconnecting")
                 s = openSocket()
                 joinRoom(s)
@@ -227,7 +227,7 @@ while True:
                         
                     else:    
                         sendMessage(s, "/timeout "+user+" 1")
-                        sendMessage(s, "@{} links are not allowed! Ask a mod for a !permit.")
+                        sendMessage(s, "@{} links are not allowed! Ask a mod for a !permit.".format(user))
 
 #####################################################################################################################
                                                     ## COMMANDS ## 
@@ -368,7 +368,7 @@ while True:
                         permits.append(target.lower())
                         sendMessage(s, "@{}: {} has allowed you to post one link.".format(target, user))
 
-                if re.search(r"^!tweet https://twitter.com/ATablestory/status/[0-9_]+", message ) and (user in mods):
+                if re.search(r"^!tweet https://twitter.com/[a-zA-Z0-9]+/status/[0-9_]+", message ) and (user in mods):
                     url = message.split(" ")[1]
                       
                     if "!retweet" not in triggers:
@@ -430,7 +430,7 @@ while True:
 
 
         except:
-            
+            print(doesntexist)
             
             pass
         else:
