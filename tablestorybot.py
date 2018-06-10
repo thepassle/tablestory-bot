@@ -391,7 +391,7 @@ while True:
                     totalquotes = len(dataquotes)
                     print(totalquotes)
 
-                    if re.search(r"!quote random$", message ):
+                    if re.search(r"^!quote random$", message ):
                         print("** Quote random **")
 
                         number = random.randint(1,totalquotes)
@@ -400,7 +400,7 @@ while True:
                         sendMessage(s, str(quote[1]))
 
 
-                    if re.search(r"!quote [0-9]+$", message ):
+                    if re.search(r"^!quote [0-9]+$", message ):
                         print("** Quote <nr> **")
 
                         messages = message.split(' ')
@@ -410,7 +410,7 @@ while True:
                         sendMessage(s, str(quote[1]))
 
 
-                    if re.search(r"!delquote [0-9]+", message ) and (user in mods):
+                    if re.search(r"^!delquote [0-9]+", message ) and (user in mods):
                         print("** Remove quote **")
 
                         quotenr = message.split(' ', 1)[1]
@@ -418,7 +418,7 @@ while True:
                         sendMessage(s, "Quote #" + quotenr + " deleted.")
 
 
-                    if re.search(r"!addquote", message ) and (user in mods):
+                    if re.search(r"^!addquote", message ) and (user in mods):
                         print("** Add quote **")
 
                         newquote = str(message.strip().split(' ', 1)[1])
