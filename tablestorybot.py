@@ -386,18 +386,22 @@ while True:
 #####################################################################################################################
 
                 if "!quote" in message or "!addquote" in message or "!delquote" in message:
-                    dataquotes = dbGetAll("SELECT * FROM quotes")
-                    print(dataquotes)
-                    totalquotes = len(dataquotes)
-                    print(totalquotes)
 
                     if re.search(r"^!quote random$", message ):
                         print("** Quote random **")
 
-                        number = random.randint(1,totalquotes)
-                        quote = dbGetOne("SELECT * FROM quotes WHERE number = '"+str(number)+"'")
+                        totalquotes = dbGetOne("SELECT COUNT(quote) FROM quotes")[0]
 
-                        sendMessage(s, str(quote[1]))
+                        sent = False
+                        while sent == False:
+                            try:
+                                number = random.randint(1,totalquotes)
+                                quote = dbGetOne("SELECT * FROM quotes WHERE nummer = '"+str(number)+"'")
+
+                                sendMessage(s, str(quote[1]))
+                                sent = True
+                            except:
+                                continue
 
 
                     if re.search(r"^!quote [0-9]+$", message ):
