@@ -1,3 +1,6 @@
+
+# -*- coding: utf-8 -*-
+
 import time
 import ast
 import socket
@@ -24,7 +27,7 @@ config.read('config.ini')
 
 
 def dbGetOne(query):
-    db = pymysql.connect(config["Database"]["HOSTNAME"],config["Database"]["USERNAME"],config["Database"]["PASSWORD"],config["Database"]["DBNAME"] )
+    db = pymysql.connect(config["Database"]["HOSTNAME"],config["Database"]["USERNAME"],config["Database"]["PASSWORD"],config["Database"]["DBNAME"], charset='utf8mb4' )
     cursor = db.cursor()
     cursor.execute(query)
     data = cursor.fetchone()
@@ -32,7 +35,7 @@ def dbGetOne(query):
     return data
 
 def dbGetAll(query):
-    db = pymysql.connect(config["Database"]["HOSTNAME"],config["Database"]["USERNAME"],config["Database"]["PASSWORD"],config["Database"]["DBNAME"] )
+    db = pymysql.connect(config["Database"]["HOSTNAME"],config["Database"]["USERNAME"],config["Database"]["PASSWORD"],config["Database"]["DBNAME"], charset='utf8mb4' )
     cursor = db.cursor()
     cursor.execute(query)
     data = cursor.fetchall()
@@ -41,14 +44,14 @@ def dbGetAll(query):
 
 def dbExecute(query):
     
-    db = pymysql.connect(config["Database"]["HOSTNAME"],config["Database"]["USERNAME"],config["Database"]["PASSWORD"],config["Database"]["DBNAME"] )
+    db = pymysql.connect(config["Database"]["HOSTNAME"],config["Database"]["USERNAME"],config["Database"]["PASSWORD"],config["Database"]["DBNAME"], charset='utf8mb4' )
     cursor = db.cursor()
     cursor.execute(query)
     db.close()
 
 def dbExecuteargs(query, arg):
    
-    db = pymysql.connect(config["Database"]["HOSTNAME"],config["Database"]["USERNAME"],config["Database"]["PASSWORD"],config["Database"]["DBNAME"] )
+    db = pymysql.connect(config["Database"]["HOSTNAME"],config["Database"]["USERNAME"],config["Database"]["PASSWORD"],config["Database"]["DBNAME"], charset='utf8mb4' )
     cursor = db.cursor()
     cursor.execute(query, arg)
     db.close()
@@ -75,7 +78,7 @@ def openSocket():
 def sendMessage(s, message):
     messageTemp = "PRIVMSG #" + config["Twitch"]["CHANNEL"]+ " :" + message
     s.send(str(messageTemp + "\r\n").encode("utf-8"))
-    print("Sent: " + messageTemp)
+    print("Sent: " + str(messageTemp.encode('utf-8')) )
 
 def joinRoom(s):
     readbuffer = ""
@@ -115,16 +118,13 @@ def load_commands():
     triggerlist = []
     replies  = {}
     levels = {}
-    allCommands = dbGetAll("SELECT * FROM commands")
+    allCommands = dbGetAll("SELECT * FROM commands2")
     for command in allCommands:
         trigger = str(command[0])
         triggerlist.append(trigger)
-        reply = str(command[1][2:-1])
-        replyb = bytes(reply, "utf-8")
-        replye = ast.literal_eval(str(replyb).replace('\\\\', '\\'))
-        replyf = replye.decode("utf-8")
+        reply = command[1]
         
-        replies[trigger] = replyf
+        replies[trigger] = reply
         levels[trigger] = str(command[2])
     print(triggerlist)
     return (triggerlist, replies, levels)
@@ -207,6 +207,7 @@ while True:
                         tempmods = tempmsg[3].split(",")
                         #print(tempmods)
                         mods = []
+                        mods.append("karlklaxon")
                         mods.append("tablestory")
                         for moderator in tempmods:
                             mods.append(moderator.lstrip())
@@ -218,7 +219,7 @@ while True:
                 else:
                     continue
 
-                print("{} typed: {} \n".format(user, message))
+                print("{} typed: {} \n".format(user, message.encode('utf-8')))
 
 
                 if re.search(r"[a-zA-Z]{2,}\.[a-zA-Z]{2,}", message ) and (user not in mods):
@@ -274,11 +275,10 @@ while True:
                         print(reply.encode("utf-8"))
 
                         if command[0] == '!':
-                            query = "INSERT INTO commands (command, reply, clearance) VALUES ( %s, %s, %s)"
-                           
+                            query = "INSERT INTO commands2 (command, reply, clearance) VALUES ( %s, %s, %s)"
                             
 
-                            dbExecuteargs(query, (command, str(reply.encode("utf-8")), clearance))
+                            dbExecuteargs(query, (command, reply, clearance))
                             sendMessage(s, "Command: '"+command+"' added.")
                             triggers.append(command)
                             responses[command] = reply
@@ -290,7 +290,7 @@ while True:
                     print("** Removing command **")
                     message = message.split(' ', 2)
 
-                    dbExecute("DELETE FROM commands WHERE command='"+str(message[1]).strip()+"' ")
+                    dbExecute("DELETE FROM commands2 WHERE command='"+str(message[1]).strip()+"' ")
                     (triggers, responses, clearances) = load_commands()
                     if (message[1].lower() in timertriggers):
                         timertriggers.remove(message[1].lower())
