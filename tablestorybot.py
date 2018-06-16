@@ -334,7 +334,7 @@ while True:
                     args = message.split(" ")
                     if len(args) >= 2:
                         if args[1] == "list":
-                            sendMessage(s, "/w {} Regulars: {}".format(user, ",".join(regulars)))
+                            sendMessage(s, "/w {} Regulars: {}".format(user, ", ".join(regulars)))
                             continue
 
                         if len(args) != 3:
