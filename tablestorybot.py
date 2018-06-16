@@ -78,7 +78,7 @@ def openSocket():
 def sendMessage(s, message):
     messageTemp = "PRIVMSG #" + config["Twitch"]["CHANNEL"]+ " :" + message
     s.send(str(messageTemp + "\r\n").encode("utf-8"))
-    print("Sent: " + str(messageTemp.encode('utf-8')) )
+    print("Sent: " + str(messageTemp) )
 
 def joinRoom(s):
     readbuffer = ""
@@ -162,7 +162,11 @@ mods = []
 permits = []
 
 timertriggers = config["Timers"]["TRIGGERS"].split(",")
-
+regulars = config["Twitch"]["regulars"].split(",")
+if "" in regulars:
+    regulars.remove("")
+if "" in timertriggers:
+    timertriggers.remove("")
 (triggers, responses, clearances) = load_commands()
 loopThread = Thread(target = taskLoop, args = (s, responses, timertriggers))
 loopThread.setDaemon(True)
@@ -219,13 +223,14 @@ while True:
                 else:
                     continue
 
-                print("{} typed: {} \n".format(user, message.encode('utf-8')))
+                print("{} typed: {} \n".format(user, message))
 
 
                 if re.search(r"[a-zA-Z]{2,}\.[a-zA-Z]{2,}", message ) and (user not in mods):
                     if user.lower() in permits:
                         permits.remove(user)
-                        
+                    elif user.lower() in regulars:
+                        pass
                     else:    
                         sendMessage(s, "/timeout "+user+" 1")
                         sendMessage(s, "@{} links are not allowed! Ask a mod for a !permit.".format(user))
@@ -324,6 +329,34 @@ while True:
                 if re.search(r"^!refreshmods", message):
                     requested = True
                     sendMessage(s, "/mods")
+
+                if (re.search(r"^!regular", message) and (user in mods)):
+                    args = message.split(" ")
+                    if len(args) >= 2:
+                        if args[1] == "list":
+                            sendMessage(s, "/w {} Regulars: {}".format(user, ",".join(regulars)))
+                            continue
+
+                        if len(args) != 3:
+                            continue
+                        if args[1] == "add":
+                            
+                            if args[2].lower() in regulars:
+                                sendMessage(s, "{} is already a regular.".format(args[2]))
+                                continue
+
+                            regulars.append(args[2].lower())
+                            config.set("Twitch", "regulars", ",".join(regulars))
+                            sendMessage(s, "Added {} to regulars".format(args[2]))
+                        if args[1] == "del":
+                            if args[2].lower() not in regulars:
+                                sendMessage(s, "{} was not a regular".format(args[2]))
+                                continue
+                            regulars.remove(args[2].lower())
+                            config.set("Twitch", "regulars", ",".join(regulars))
+                            sendMessage(s, "Removed {} from regulars.".format(args[2]))
+                        with open("config.ini", 'w') as configfile:
+                            config.write(configfile)
 
                 if re.search(r"^!uptime", message):
                     twitch_api_stream_url = "https://api.twitch.tv/kraken/streams/tablestory?client_id=" + config["Twitch"]["CLIENT_ID"]
