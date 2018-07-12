@@ -449,11 +449,11 @@ while True:
                         while sent == False:
                             try:
                                 
-                                quotes = dbGetAll("SELECT * FROM quotes2")
-                                quote = random.choice(quotes)
+                                quotes = dbGetOne("call getrandomquote()")
+                                #quote = random.choice(quotes)
                                 
 
-                                sendMessage(s, "{} #{}".format(quote[1], quote[0]))
+                                sendMessage(s, "{} #{}".format(quotes[1], quotes[0]))
                                 sent = True
                             except:
                                 continue
