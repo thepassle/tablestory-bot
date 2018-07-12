@@ -171,7 +171,7 @@ if "" in timertriggers:
 (triggers, responses, clearances) = load_commands()
 loopThread = Thread(target = taskLoop, args = (s, responses, timertriggers))
 loopThread.setDaemon(True)
-loopThread.start()
+#loopThread.start()
 
 while True:
     while True:
@@ -181,13 +181,16 @@ while True:
 
             try:
                 chat_data =  s.recv(1024)
-                
+                if chat_data  == b'':
+                    raise socket.timeout
             except:
                 print("Error: disconnected.. Reconnecting")
                 s = openSocket()
                 joinRoom(s)
                 continue
-
+            if not loopThread.is_alive():
+                print("Loop thread not running, starting....")
+                loopThread.start()
             readbuffer = readbuffer + chat_data.decode("utf-8")
             temp = readbuffer.split('\r\n')
             readbuffer = temp.pop()
