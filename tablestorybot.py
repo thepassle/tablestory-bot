@@ -161,6 +161,7 @@ responses = {}
 clearances = {}
 mods = []
 permits = []
+rollcooldown = {}
 
 timertriggers = config["Timers"]["TRIGGERS"].split(",")
 regulars = config["Twitch"]["regulars"].split(",")
@@ -249,8 +250,8 @@ while True:
                     
                     trigger = message.strip().split(" ")[0]    
                     if trigger.lower() in triggers:
-                        clearance = clearances[trigger]
-                        reply = responses[trigger]
+                        clearance = clearances[trigger.lower()]
+                        reply = responses[trigger.lower()]
                         if re.search(r""+trigger+" [@]?[a-zA-Z0-9]+", message ):
                             if clearance == 'mod' and user not in mods:
                                 pass
@@ -329,6 +330,30 @@ while True:
 #####################################################################################################################
                                                     ## UTILS ## 
 #####################################################################################################################
+
+                if (re.search(r"^!roll$", message) or re.search(r"^!roll [0-9]+d[0-9]+", message)):
+                    if user in rollcooldown:
+                        if time.time() < rollcooldown[user]:
+                            continue
+                    args = message.lower().split(" ")
+                    if (len(args) == 1):
+                        sendMessage(s, "You rolled a {}".format(random.randint(1,20)))
+                        rollcooldown[user] = time.time() + 30
+                    elif (len(args) == 2):
+                        numdice = int(args[1].split("d")[0])
+                        dicetype = int(args[1].split("d")[1])
+                        rolls = []
+                        total = 0
+                        if (0 < numdice) and (numdice < 7):
+                            for i in range(numdice):
+                                curroll = random.randint(1, dicetype)
+                                rolls.append(str(curroll))
+                                total += curroll
+                            sendMessage(s, "You rolled {}={}".format("+".join(rolls), total))
+                    else:
+                        continue
+                    if user not in mods:
+                        rollcooldown[user] = time.time() + 30
 
                 if re.search(r"^!timer ![a-zA-Z0-9]+", message ) and (user in mods):
                     target = message.split(" ")[1].lower()
