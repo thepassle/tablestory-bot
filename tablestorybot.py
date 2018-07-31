@@ -129,6 +129,43 @@ def load_commands():
         levels[trigger] = str(command[2])
     print(triggerlist)
     return (triggerlist, replies, levels)
+
+def load_dndapi():
+    spell_data_clean = {}
+    connection = urllib.request.urlopen("http://dnd5eapi.co/api/spells")
+    spelldata =json.loads(connection.read().decode("utf-8"))
+    for spell in spelldata["results"]:
+        if "/" in spell["name"]:
+            parts = spell["name"].split("/")
+            for part in parts:
+                spell_data_clean[part.lower().replace("'", "")] = spell["url"]
+        else:
+            spell_data_clean[spell["name"].lower().replace("'", "")] = spell["url"]
+    print("Loaded {} spells from api.".format(len(spell_data_clean)))
+    return spell_data_clean
+
+def get_spell_text(url):
+    connection = urllib.request.urlopen(url)
+    response = json.loads(connection.read().decode("utf-8"))
+    spell_text = []
+    spell_text.append(response["name"])
+    spell_text.append(", ".join(response["components"]))
+    spell_text.append(response["school"]["name"])
+    spell_text.append("Duration: {}".format(response["duration"]))
+    spell_text.append("Concentration: {}".format(response["concentration"]))
+    spell_text.append("Cast time: {}".format(response["casting_time"]))
+    spell_text.append(response["desc"][0].replace("â€™", "'"))
+    if "higher_level" in response:
+        spell_text.append(response["higher_level"][0])
+    #spell_text.append("page")
+    output = "-".join(spell_text)
+    if len(output) > 500:
+        sendMessage(s, output[0:499])
+        sendMessage(s, output[500:])
+    else:
+        sendMessage(s, output)
+
+    
 def taskLoop(s, replies, timers):
     is_live = False
     while True:
@@ -172,6 +209,7 @@ if "" in timertriggers:
 (triggers, responses, clearances) = load_commands()
 loopThread = Thread(target = taskLoop, args = (s, responses, timertriggers))
 loopThread.setDaemon(True)
+dnd_spells = load_dndapi()
 #loopThread.start()
 
 while True:
@@ -331,7 +369,7 @@ while True:
                                                     ## UTILS ## 
 #####################################################################################################################
 
-                if (re.search(r"^!roll$", message) or re.search(r"^!roll [0-9]+d[0-9]+", message)):
+                if (re.search(r"^!roll$", message) or re.search(r"^!roll [0-9]+d[0-9]+$", message)):
                     if user in rollcooldown:
                         if time.time() < rollcooldown[user]:
                             continue
@@ -345,15 +383,28 @@ while True:
                         rolls = []
                         total = 0
                         if (0 < numdice) and (numdice < 7):
-                            for i in range(numdice):
-                                curroll = random.randint(1, dicetype)
-                                rolls.append(str(curroll))
-                                total += curroll
-                            sendMessage(s, "You rolled {}={}".format("+".join(rolls), total))
+                            if dicetype <= 100:
+                                for i in range(numdice):
+                                    curroll = random.randint(1, dicetype)
+                                    rolls.append(str(curroll))
+                                    total += curroll
+                                if numdice > 1:
+                                    sendMessage(s, "You rolled {}={}".format("+".join(rolls), total))
+                                else:
+                                    sendMessage(s, "You rolled a {}".format(total))
                     else:
                         continue
                     if user not in mods:
                         rollcooldown[user] = time.time() + 30
+
+                if re.search(r"^!spell [a-zA-Z\'\s]+", message):
+                    spell_name = message.split(" ",1)[1].lower().replace("'","")
+                    if spell_name in dnd_spells:
+                        get_spell_text(dnd_spells[spell_name])
+                        continue
+                    else:
+                        sendMessage(s, "Spell not found.")
+                        continue
 
                 if re.search(r"^!timer ![a-zA-Z0-9]+", message ) and (user in mods):
                     target = message.split(" ")[1].lower()
