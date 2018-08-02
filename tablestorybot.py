@@ -12,7 +12,7 @@ import string
 import requests
 import datetime
 import configparser
-
+import socketserver
 from threading import Thread
 
 # needs a timer (and be able toadd a command to the timer)
@@ -25,7 +25,162 @@ from threading import Thread
 config = configparser.ConfigParser()
 config.read('config.ini')
 
+class BotSocketHandler(socketserver.BaseRequestHandler):
+    
+    def handle(self):
+        print("Incoming connection...")
+        # self.request is the TCP socket connected to the client
+        self.action_dispatch = {"reload_commands": self.do_reload, "add_command": self.do_addcom, "del_command": self.do_delcom, "edit_command": self.do_editcom}
+        while True:
+            self.data = self.request.recv(1024).strip()
+            
+            try:
+                self.jsonin = json.loads(self.data.decode("UTF-8"))
+            except:
+                self.reply = {"result": "Error", "msg": "Invalid JSON"}
+                self.request.sendall(json.dumps(self.reply).encode("UTF-8"))
+                return
+            else:  
+                print("JSON: {}".format(self.jsonin))
+                if "action" not in self.jsonin:
+                    self.reply = {"result": "Error", "msg": "Missing argument action"}
+                    self.request.sendall(json.dumps(self.reply).encode("UTF-8"))
+                    return
+                try:
+                    self.action_dispatch[self.jsonin["action"]]()
+                except:
+                    self.reply = {"result": "Error", "msg": "Invalid action given."}
+                    self.request.sendall(json.dumps(self.reply).encode("UTF-8"))
+                    return
+        
+    def do_reload(self):
+        try:
+            print("Relading commands because of remote request.")
+            commands.load_commands()
+        except:
+            self.reply = {"result": "Error", "msg": "Loading commands failed."}
+            self.request.sendall(json.dumps(self.reply).encode("UTF-8"))
+        else:
+            self.reply = {"result": "OK", "msg": "Successfully reloaded commands."}
+            self.request.sendall(json.dumps(self.reply).encode("UTF-8"))
 
+    def do_addcom(self):
+        print("Remote connection requested to add a command.")
+        try:
+            if all (arg in self.jsonin for arg in("level", "trigger", "response")):
+                if self.jsonin["trigger"] not in commands.triggers:
+                    print("Inserting new command into bot.")
+                    commands.replies[self.jsonin["trigger"]] = self.jsonin["response"]
+                    commands.clearances[self.jsonin["trigger"]] = self.jsonin["level"]
+                    commands.triggers.append(self.jsonin["trigger"])
+                else:
+                    self.reply = {"result": "Error", "msg": "Command already exists."}
+                    self.request.sendall(json.dumps(self.reply).encode("UTF-8"))
+                    return
+            else:
+                self.reply = {"result": "Error", "msg": "Error missing argument for add_command."}
+                self.request.sendall(json.dumps(self.reply).encode("UTF-8"))
+                return
+        except:
+            self.reply = {"result": "Error", "msg": "Error adding new command to bot."}
+            self.request.sendall(json.dumps(self.reply).encode("UTF-8"))
+        else:
+            self.reply = {"result": "OK", "msg": "Successfully added command."}
+            self.request.sendall(json.dumps(self.reply).encode("UTF-8"))
+
+    def do_delcom(self):
+        print("Remote connection requested to remove a command.")
+        try:
+            if "trigger" in self.jsonin:
+                if self.jsonin["trigger"] in commands.triggers:
+                    try:
+                        print("Removing {}....".format(self.jsonin["trigger"]))
+                        commands.triggers.remove(self.jsonin["trigger"])
+                        commands.clearances.pop(self.jsonin["trigger"])
+                        commands.replies.pop(self.jsonin["trigger"])
+                    except:
+                        print("Exception")
+                    if (self.jsonin["trigger"] in commands.timertriggers):
+                        commands.timertriggers.remove(self.jsonin["trigger"])
+                        config.set("Timers", "TRIGGERS", ",".join(commands.timertriggers))
+                        with open("config.ini", 'w') as configfile:
+                            config.write(configfile)
+                else:
+                    self.reply = {"result": "Error", "msg": "Command does not exist."}
+                    self.request.sendall(json.dumps(self.reply).encode("UTF-8"))
+                    return
+            else:
+                self.reply = {"result": "Error", "msg": "Error missing argument for del_command."}
+                self.request.sendall(json.dumps(self.reply).encode("UTF-8"))
+                return
+        except:
+            self.reply = {"result": "Error", "msg": "Error removing command from bot."}
+            self.request.sendall(json.dumps(self.reply).encode("UTF-8"))
+        else:
+            self.reply = {"result": "OK", "msg": "Successfully removed command."}
+            self.request.sendall(json.dumps(self.reply).encode("UTF-8"))
+        
+    def do_editcom(self):
+        print("Remote connection requested to edit a command.")
+        try:
+            if all (arg in self.jsonin for arg in("level", "trigger", "response")):
+                if self.jsonin["trigger"] in commands.triggers:
+                    print("Editing command {}.".format(self.jsonin["trigger"]))
+                    commands.replies[self.jsonin["trigger"]] = self.jsonin["response"]
+                    commands.clearances[self.jsonin["trigger"]] = self.jsonin["level"]
+                    
+                else:
+                    self.reply = {"result": "Error", "msg": "Command does not exist in bot."}
+                    self.request.sendall(json.dumps(self.reply).encode("UTF-8"))
+                    return
+            else:
+                self.reply = {"result": "Error", "msg": "Error missing argument for edit_command."}
+                self.request.sendall(json.dumps(self.reply).encode("UTF-8"))
+                return
+        except:
+            self.reply = {"result": "Error", "msg": "Error editing command in bot."}
+            self.request.sendall(json.dumps(self.reply).encode("UTF-8"))
+        else:
+            self.reply = {"result": "OK", "msg": "Successfully edited command."}
+            self.request.sendall(json.dumps(self.reply).encode("UTF-8"))
+
+    
+def socketloop():
+   
+
+    
+    server = socketserver.TCPServer((config["Remote"]["host"], int(config["Remote"]["port"])), BotSocketHandler)
+        # Activate the server; this will keep running until you
+        # interrupt the program with Ctrl-C
+    server.serve_forever()
+
+class BotCommands:
+
+    def __init__(self):
+        self.triggers = []
+        self.replies = {}
+        self.clearances = {}
+        self.timertriggers = config["Timers"]["TRIGGERS"].split(",")
+        self.timertest = False
+
+    def load_commands(self):
+        print("Loading commands...")
+        self.triggers.clear()
+        self.replies.clear()
+        self.clearances.clear()
+
+        allCommands = dbGetAll("SELECT * FROM commands2")
+
+
+        for command in allCommands:
+           
+            trigger = str(command[0])
+            self.triggers.append(trigger)
+            reply = command[1]
+
+        
+            self.replies[trigger] = reply
+            self.clearances[trigger] = str(command[2])
 
 def dbGetOne(query):
     db = pymysql.connect(config["Database"]["HOSTNAME"],config["Database"]["USERNAME"],config["Database"]["PASSWORD"],config["Database"]["DBNAME"], charset='utf8mb4' )
@@ -114,21 +269,7 @@ def is_live_stream(streamer_name):
             print("Twitch API did not respond, trying again in 60 seconds..")
             time.sleep(60)
 
-def load_commands():
-    print("Loading commands...")
-    triggerlist = []
-    replies  = {}
-    levels = {}
-    allCommands = dbGetAll("SELECT * FROM commands2")
-    for command in allCommands:
-        trigger = str(command[0])
-        triggerlist.append(trigger)
-        reply = command[1]
-        
-        replies[trigger] = reply
-        levels[trigger] = str(command[2])
-    print(triggerlist)
-    return (triggerlist, replies, levels)
+
 
 def load_dndapi():
     spell_data_clean = {}
@@ -154,32 +295,39 @@ def get_spell_text(url):
     spell_text.append("Duration: {}".format(response["duration"]))
     spell_text.append("Concentration: {}".format(response["concentration"]))
     spell_text.append("Cast time: {}".format(response["casting_time"]))
-    spell_text.append(response["desc"][0].replace("â€™", "'"))
+    print("Description: {}".format(len(response["desc"])))
+    if (len(response["desc"]) >= 2):
+        spell_text.append(response["desc"][0].replace("â€™", "'") + " " + response["desc"][1].replace("â€™", "'"))
+    else:
+        spell_text.append(response["desc"][0].replace("â€™", "'"))
     if "higher_level" in response:
         spell_text.append(response["higher_level"][0])
     #spell_text.append("page")
     output = "-".join(spell_text)
     if len(output) > 500:
         sendMessage(s, output[0:499])
-        sendMessage(s, output[500:])
+        if len(output) > 1000:
+            sendMessage(s, output[500:999])
+        else:
+            sendMessage(s, output[500:])
     else:
         sendMessage(s, output)
 
     
-def taskLoop(s, replies, timers):
+def taskLoop():
     is_live = False
     while True:
-        if is_live:
-            if(len(timers) > 0):
-                sendMessage(s, replies[random.choice(timers)])
+        if is_live or commands.timertest:
+            if(len(commands.timertriggers) > 0):
+                sendMessage(s, commands.replies[random.choice(commands.timertriggers)])
             time.sleep(14 * 60)
             is_live = is_live_stream(config["Twitch"]["CHANNEL"])
             if not is_live:
                 sendMessage(s, "Detected channel offline.")
         else:
-            if "!retweet" in timers:
-                timers.remove("!retweet")
-                replies["!retweet"] = "Tweet for current stream not set."
+            if "!retweet" in commands.timertriggers:
+                commands.timertriggers.remove("!retweet")
+                commands.replies["!retweet"] = "Tweet for current stream not set."
                 sendMessage(s, "Removed retweet timer.")
             is_live = is_live_stream(config["Twitch"]["CHANNEL"])
             if is_live:
@@ -187,27 +335,27 @@ def taskLoop(s, replies, timers):
         time.sleep(60)
 
 
-
+commands = BotCommands()
 s = openSocket()
 joinRoom(s)
 readbuffer = ""
 message = ""
 requested=False
-triggers = []
-responses = {}
-clearances = {}
+
 mods = []
 permits = []
 rollcooldown = {}
+commands.load_commands()
 
-timertriggers = config["Timers"]["TRIGGERS"].split(",")
 regulars = config["Twitch"]["regulars"].split(",")
 if "" in regulars:
     regulars.remove("")
-if "" in timertriggers:
-    timertriggers.remove("")
-(triggers, responses, clearances) = load_commands()
-loopThread = Thread(target = taskLoop, args = (s, responses, timertriggers))
+if "" in commands.timertriggers:
+    commands.timertriggers.remove("")
+socketThread = Thread(target = socketloop)
+socketThread.setDaemon(True)
+socketThread.start()
+loopThread = Thread(target = taskLoop)
 loopThread.setDaemon(True)
 dnd_spells = load_dndapi()
 #loopThread.start()
@@ -287,9 +435,9 @@ while True:
                     
                     
                     trigger = message.strip().split(" ")[0]    
-                    if trigger.lower() in triggers:
-                        clearance = clearances[trigger.lower()]
-                        reply = responses[trigger.lower()]
+                    if trigger.lower() in commands.triggers:
+                        clearance = commands.clearances[trigger.lower()]
+                        reply = commands.replies[trigger.lower()]
                         if re.search(r""+trigger+" [@]?[a-zA-Z0-9]+", message ):
                             if clearance == 'mod' and user not in mods:
                                 pass
@@ -309,7 +457,7 @@ while True:
 
                     updatedCommand = re.split(r'^!editcom ![a-zA-Z0-9]{2,}\b ', message)[1]
                     command = message.split(' ')[1]
-                    if command.lower() not in triggers:
+                    if command.lower() not in commands.triggers:
                         sendMessage(s, "Command {} doesn't exist".format(command))
                         continue
                     else:
@@ -317,7 +465,7 @@ while True:
                         dbExecute(query)
                         sendMessage(s, "Command: '"+command+"' edited.")
 
-                        (triggers, responses, clearances) = load_commands()
+                        commands.load_commands()
                         continue       
 
                 #add command
@@ -332,7 +480,7 @@ while True:
 
                         clearance = str(message[1].split('=')[1])
                         command = str(message[2]).lower()
-                        if command.lower() in triggers:
+                        if command.lower() in commands.triggers:
                             sendMessage(s, "Command {} already exists".format(command))
                             continue
                         reply = str(message[3])
@@ -344,9 +492,9 @@ while True:
 
                             dbExecuteargs(query, (command, reply, clearance))
                             sendMessage(s, "Command: '"+command+"' added.")
-                            triggers.append(command)
-                            responses[command] = reply
-                            clearances[command] = clearance
+                            commands.triggers.append(command)
+                            commands.replies[command] = reply
+                            commands.clearances[command] = clearance
                             #(triggers, responses, clearances) = load_commands()
                             continue
                     
@@ -355,10 +503,10 @@ while True:
                     message = message.split(' ', 2)
 
                     dbExecute("DELETE FROM commands2 WHERE command='"+str(message[1]).strip()+"' ")
-                    (triggers, responses, clearances) = load_commands()
-                    if (message[1].lower() in timertriggers):
-                        timertriggers.remove(message[1].lower())
-                        config.set("Timers", "TRIGGERS", ",".join(timertriggers))
+                    commands.load_commands()
+                    if (message[1].lower() in commands.timertriggers):
+                        commands.timertriggers.remove(message[1].lower())
+                        config.set("Timers", "TRIGGERS", ",".join(commands.timertriggers))
                         with open("config.ini", 'w') as configfile:
                             config.write(configfile)
                 
@@ -408,16 +556,16 @@ while True:
 
                 if re.search(r"^!timer ![a-zA-Z0-9]+", message ) and (user in mods):
                     target = message.split(" ")[1].lower()
-                    if target not in triggers:
+                    if target not in commands.triggers:
                         sendMessage(s,"Command {} does not exist".format(target))
                         continue
-                    if target in timertriggers:
-                        timertriggers.remove(target)
-                        config.set("Timers", "TRIGGERS", ",".join(timertriggers))
+                    if target in commands.timertriggers:
+                        commands.timertriggers.remove(target)
+                        config.set("Timers", "TRIGGERS", ",".join(commands.timertriggers))
                         sendMessage(s, "Command {} removed from timer.".format(target))
                     else:
-                        timertriggers.append(target)
-                        config.set("Timers", "TRIGGERS", ",".join(timertriggers))
+                        commands.timertriggers.append(target)
+                        config.set("Timers", "TRIGGERS", ",".join(commands.timertriggers))
                         sendMessage(s, "Command {} added to timer.".format(target))
                     with open("config.ini", 'w') as configfile:
                         config.write(configfile)
@@ -500,13 +648,13 @@ while True:
                 if re.search(r"^!tweet https://twitter.com/[a-zA-Z0-9]+/status/[0-9_]+", message ) and (user in mods):
                     url = message.split(" ")[1]
                       
-                    if "!retweet" not in triggers:
-                        triggers.append("!retweet")
+                    if "!retweet" not in commands.triggers:
+                        commands.triggers.append("!retweet")
                         createdtrigger = True
-                    responses["!retweet"] = "Let your friends know we're live and retweet out our stream: {}".format(url)
-                    clearances["!retweet"] = "all"
-                    if "!retweet" not in timertriggers:
-                        timertriggers.append("!retweet")
+                    commands.replies["!retweet"] = "Let your friends know we're live and retweet out our stream: {}".format(url)
+                    commands.clearances["!retweet"] = "all"
+                    if "!retweet" not in commands.timertriggers:
+                        commands.timertriggers.append("!retweet")
                     
                     sendMessage(s, "!retweet command and timer created/updated.")
 
